@@ -10,6 +10,13 @@ public class ConsizeVM {
 
     public static final Scanner scanner = new Scanner(System.in);
 
+    public static final Object NIL = new Object() {
+        @Override
+        public String toString() {
+            return "nil";
+        }
+    };
+
     public interface Word {
         List<String> words();
 
@@ -140,12 +147,15 @@ public class ConsizeVM {
                     Deque<Object> cs,
                     Map<String, Word> dict
             ) {
-                // keine native Funktion
+                for (int i = words.length - 1; i >= 0; i--) {
+                    cs.push(words[i]);
+                }
             }
         });
     }
 
     public static void defineBasicWords() {
+
         word("swap", (DSWord) ds -> {
             Object y = ds.pop();
             Object x = ds.pop();
@@ -212,22 +222,20 @@ public class ConsizeVM {
 
         // push: [x s] -> [s']   (x oben auf Stack s)
         word("push", (DSWord) ds -> {
-            Object s = ds.pop();
             Object x = ds.pop();
+            Object s = ds.pop();
 
             Deque<Object> stack = new ArrayDeque<>((Deque<Object>) s);
 
             stack.push(x);
             ds.push(stack);
         });
-
-        // top: [s] -> [x]
         word("top", (DSWord) ds -> {
-            Object s = ds.pop();
+            Deque<Object> stack = (Deque<Object>) ds.pop();
 
-            Deque<Object> stack = (Deque<Object>) s;
+            Object value = stack.peek();
 
-            ds.push(stack.peek());
+            ds.push(value == null ? NIL : value);
         });
 
         // pop: [s] -> [rest]
@@ -320,12 +328,10 @@ public class ConsizeVM {
             ds.push(result);
         });
 
-        // assoc: [m k v] -> [m']
         word("assoc", (DSWord) ds -> {
-            Object v = ds.pop();
-            Object k = ds.pop();
-
             Map<Object, Object> m = (Map<Object, Object>) ds.pop();
+            Object k = ds.pop();
+            Object v = ds.pop();
 
             Map<Object, Object> result = new HashMap<>(m);
             result.put(k, v);
@@ -421,12 +427,20 @@ public class ConsizeVM {
         word("slurp", (DSWord) ds -> {
             String file = (String) ds.pop();
 
-            try {
-                String content = java.nio.file.Files.readString(
-                        java.nio.file.Path.of(file)
+            try (var in = ConsizeVM.class.getResourceAsStream(file)) {
+
+                if (in == null) {
+                    throw new RuntimeException("Resource nicht gefunden: " + file);
+                }
+
+                String content = new String(
+                        in.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8
                 );
+
                 ds.push(content);
-            } catch (java.io.IOException e) {
+
+            } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         });
@@ -462,7 +476,7 @@ public class ConsizeVM {
                 throw new RuntimeException(e);
             }
         });
-        // uncomment: [string] -> [string]
+        // uncomment: entfernt %-Kommentare
         word("uncomment", (DSWord) ds -> {
             String w = (String) ds.pop();
 
@@ -488,15 +502,14 @@ public class ConsizeVM {
             ds.push(result);
         });
 
-        // undocument: [string] -> [string]
+        // undocument: extrahiert nur Dokumentationszeilen, die mit >> beginnen
         word("undocument", (DSWord) ds -> {
             String w = (String) ds.pop();
 
             StringBuilder result = new StringBuilder();
-            java.util.regex.Pattern pattern =
-                    java.util.regex.Pattern.compile("(?m)^%?>> (.*?)(\\r\\n?|\\n)");
 
-            java.util.regex.Matcher matcher = pattern.matcher(w);
+            var pattern = java.util.regex.Pattern.compile("(?m)^%?>> (.*?)(\\r\\n?|\\n)");
+            var matcher = pattern.matcher(w);
 
             while (matcher.find()) {
                 if (!result.isEmpty()) {
@@ -529,44 +542,61 @@ public class ConsizeVM {
                 cs.push(item);
             }
         });
-        // call/cc: [quoteStack] -> [continuation], quoteStack wird auf cs gelegt
         word("call/cc", (DSCSWord) (ds, cs) -> {
             Deque<Object> quote = (Deque<Object>) ds.pop();
 
+            Deque<Object> oldDs = new ArrayDeque<>(ds);
+            Deque<Object> oldCs = new ArrayDeque<>(cs);
+
             Deque<Object> continuation = new ArrayDeque<>();
-            continuation.push(new ArrayDeque<>(cs));
-            continuation.push(new ArrayDeque<>(ds));
 
-            ds.push(continuation);
-
-            List<Object> items = new ArrayList<>(quote);
-            Collections.reverse(items);
-
-            for (Object item : items) {
-                cs.push(item);
-            }
-        });
-        // continue: [dsState csState] -> setzt ds und cs zurück
-        word("continue", (DSCSWord) (ds, cs) -> {
-            Deque<Object> csState = (Deque<Object>) ds.pop();
-            Deque<Object> dsState = (Deque<Object>) ds.pop();
+            // continuation = [oldCs, oldDs]
+            continuation.push(oldDs);
+            continuation.push(oldCs);
 
             ds.clear();
-            ds.addAll(dsState);
+            ds.addAll(continuation);
 
             cs.clear();
-            cs.addAll(csState);
+            cs.addAll(quote);
+        });
+        word("continue", (DSCSWord) (ds, cs) -> {
+            Deque<Object> newCs = (Deque<Object>) ds.pop();
+            Deque<Object> newDs = (Deque<Object>) ds.pop();
+
+            ds.clear();
+            ds.addAll(newDs);
+
+            cs.clear();
+            cs.addAll(newCs);
         });
         // get-dict: [] -> [dict]
         word("get-dict", (FullWord) (ds, cs, dict) -> {
             ds.push(new HashMap<>(dict));
         });
-        // set-dict: [dict] -> []
         word("set-dict", (FullWord) (ds, cs, dict) -> {
-            Map<String, Word> newDict = (Map<String, Word>) ds.pop();
+            Object obj = ds.pop();
+
+            if (!(obj instanceof Map<?, ?> newDict)) {
+                throw new IllegalArgumentException("set-dict erwartet Map, bekam: " + obj);
+            }
 
             dict.clear();
-            dict.putAll(newDict);
+
+            for (Map.Entry<?, ?> entry : newDict.entrySet()) {
+                Object key = entry.getKey();
+                Object value = entry.getValue();
+
+                if (!(key instanceof String)) {
+                    throw new IllegalArgumentException("dict key ist kein String: " + key);
+                }
+
+                if (!(value instanceof Word)) {
+                    throw new IllegalArgumentException("dict value ist kein Word: " + value);
+                }
+
+                dict.put((String) key, (Word) value);
+            }
         });
         // stepcc: führt genau einen VM-Schritt aus
         word("stepcc", (FullWord) (ds, cs, dict) -> {
@@ -581,11 +611,14 @@ public class ConsizeVM {
                     Word res = dict.get(name);
 
                     if (res != null) {
-                        for (int i = res.words().size() - 1; i >= 0; i--) {
-                            cs.push(res.words().get(i));
+                        List<String> wds = res.words();
+                        if (!wds.isEmpty()) {
+                            for (int i = wds.size() - 1; i >= 0; i--) {
+                                cs.push(wds.get(i));
+                            }
+                        } else {
+                            res.run(ds, cs, dict);
                         }
-
-                        res.run(ds, cs, dict);
                     } else {
                         ds.push(name);
                         cs.push("read-word");
@@ -737,7 +770,7 @@ public class ConsizeVM {
 
             ds.push(x >= y ? "t" : "f");
         });
-        word("\\\\",
+        word("\\",
                 new ArrayDeque<>(List.of(
                         "dup", "top", "rot", "swap",
                         "push", "swap", "pop", "continue"
@@ -763,7 +796,8 @@ public class ConsizeVM {
 
         if (args.length == 0) {
             args = new String[] {
-                    "prelude-plain.txt",
+                    "\\",
+                    "/consize/prelude-plain.txt",
                     "run",
                     "say-hi"
             };
@@ -778,29 +812,60 @@ public class ConsizeVM {
 
         while (!cs.isEmpty()) {
 
-            // Einen VM-Schritt ausführen
-            dict.get("stepcc").run(ds, cs, dict);
+            Object next = cs.pop();
 
-            // Definierte Wörter in einer Zeile
+            if (next instanceof String name && dict.containsKey(name)) {
+                dict.get(name).run(ds, cs, dict);
+            } else {
+                ds.push(next);
+            }
+
             System.out.println(
-                    "Words: " +
-                            String.join(
-                                    " ",
-                                    new TreeSet<>(dict.keySet()) // alphabetisch sortiert
-                            )
+                    "Words: " + String.join(" ", new TreeSet<>(dict.keySet()))
             );
 
-            // Data Stack und Call Stack
-            System.out.println("Data Stack:" + ds + "\t" + cs + "<<<Call Stack" );
-
-            // Auf Enter warten
-            System.out.print("Weiter mit Enter...");
-            scanner.nextLine();
-            System.out.println();
+            System.out.println("DS: " + ds);
+            System.out.println("CS: " + cs);
         }
 
         // Endergebnis
         System.out.println("Programm beendet.");
         System.out.println("DS: " + ds);
+    }
+    public static String shortStack(Deque<?> stack) {
+        List<?> list = new ArrayList<>(stack);
+
+        // Einzelne Elemente kürzen
+        List<String> formatted = new ArrayList<>();
+        for (Object item : list) {
+            formatted.add(shortItem(item));
+        }
+
+        // Falls Stack kurz genug ist, alles anzeigen
+        if (formatted.size() <= 6) {
+            return formatted.toString();
+        }
+
+        // Sonst erste 3 + ... + letzte 3
+        List<String> shortened = new ArrayList<>();
+        shortened.addAll(formatted.subList(0, 3));
+        shortened.add("...");
+        shortened.addAll(formatted.subList(formatted.size() - 3, formatted.size()));
+
+        return shortened.toString();
+    }
+
+
+    public static String shortItem(Object item) {
+        String s = String.valueOf(item);
+
+        // Einzelnes Element auf max. 40 Zeichen begrenzen
+        int maxLength = 40;
+
+        if (s.length() > maxLength) {
+            return s.substring(0, maxLength - 3) + "...";
+        }
+
+        return s;
     }
 }
