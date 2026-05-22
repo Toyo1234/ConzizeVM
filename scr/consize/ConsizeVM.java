@@ -6,7 +6,7 @@ public class ConsizeVM {
 
     public static final Deque<Object> ds = new ArrayDeque<>();
     public static final Deque<Object> cs = new ArrayDeque<>();
-    public static final Map<String, Word> dict = new HashMap<>();
+    public static final Map<Object, Word> dict = new HashMap<>();
 
     public static final Scanner scanner = new Scanner(System.in);
 
@@ -23,7 +23,7 @@ public class ConsizeVM {
         void run(
                 Deque<Object> ds,
                 Deque<Object> cs,
-                Map<String, Word> dict
+                Map<Object, Word> dict
         );
     }
 
@@ -47,7 +47,7 @@ public class ConsizeVM {
         void run(
                 Deque<Object> ds,
                 Deque<Object> cs,
-                Map<String, Word> dict
+                Map<Object, Word> dict
         );
     }
     @FunctionalInterface
@@ -64,7 +64,7 @@ public class ConsizeVM {
             public void run(
                     Deque<Object> ds,
                     Deque<Object> cs,
-                    Map<String, Word> dict
+                    Map<Object, Word> dict
             ) {
                 fn.run(ds);
             }
@@ -79,7 +79,7 @@ public class ConsizeVM {
             public void run(
                     Deque<Object> ds,
                     Deque<Object> cs,
-                    Map<String, Word> dict
+                    Map<Object, Word> dict
             ) {
                 for (int i = words.length - 1; i >= 0; i--) {
                     cs.push(words[i]);
@@ -97,7 +97,7 @@ public class ConsizeVM {
             public void run(
                     Deque<Object> ds,
                     Deque<Object> cs,
-                    Map<String, Word> dict
+                    Map<Object, Word> dict
             ) {
                 fn.run(cs);
             }
@@ -113,7 +113,7 @@ public class ConsizeVM {
             public void run(
                     Deque<Object> ds,
                     Deque<Object> cs,
-                    Map<String, Word> dict
+                    Map<Object, Word> dict
             ) {
                 fn.run(ds, cs);
             }
@@ -129,7 +129,7 @@ public class ConsizeVM {
             public void run(
                     Deque<Object> ds,
                     Deque<Object> cs,
-                    Map<String, Word> dict
+                    Map<Object, Word> dict
             ) {
                 fn.run(ds, cs, dict);
             }
@@ -145,7 +145,7 @@ public class ConsizeVM {
             public void run(
                     Deque<Object> ds,
                     Deque<Object> cs,
-                    Map<String, Word> dict
+                    Map<Object, Word> dict
             ) {
                 for (int i = words.length - 1; i >= 0; i--) {
                     cs.push(words[i]);
@@ -338,8 +338,6 @@ public class ConsizeVM {
 
             ds.push(result);
         });
-
-        // dissoc: [m k] -> [m']
         word("dissoc", (DSWord) ds -> {
             Object k = ds.pop();
 
@@ -660,7 +658,7 @@ public class ConsizeVM {
             VMFunction fn = input -> {
                 Deque<Object> localDs = new ArrayDeque<>(input);
                 Deque<Object> localCs = new ArrayDeque<>(quote);
-                Map<String, Word> localDict = new HashMap<>(capturedDict);
+                Map<Object, Word> localDict = new HashMap<>(capturedDict);
 
                 while (!localCs.isEmpty()) {
                     Object itm = localCs.pop();
@@ -821,7 +819,7 @@ public class ConsizeVM {
             }
 
             System.out.println(
-                    "Words: " + String.join(" ", new TreeSet<>(dict.keySet()))
+                    "Words: " + String.join(" " + dict.keySet())
             );
 
             System.out.println("DS: " + ds);
