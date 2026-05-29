@@ -1,0 +1,4 @@
+: ! ( n -- n! ) dup 0 equal? [ drop 1 ] [ dup 1 - ! * ] if ;
+: bench! ( n -- ) dup 0 equal? [ drop ] [ 35 ! drop 1 - bench! ] if ;
+[ 10000 bench! ] time
+repr print <space> print \ ms println

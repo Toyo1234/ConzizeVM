@@ -6,9 +6,10 @@ public class ConsizeVM {
 
     public static final Deque<Object> ds = new ArrayDeque<>();
     public static final Deque<Object> cs = new ArrayDeque<>();
-    public static final Map<String, Word> dict = new HashMap<>();
+    public static final Map<Object, Object> dict = new HashMap<>();
 
     public static final Scanner scanner = new Scanner(System.in);
+    public static final boolean PRINT = false;
 
     public static final Object NIL = new Object() {
         @Override
@@ -18,13 +19,47 @@ public class ConsizeVM {
     };
 
     public interface Word {
-        List<String> words();
-
         void run(
                 Deque<Object> ds,
                 Deque<Object> cs,
-                Map<String, Word> dict
+                Map<Object, Object> dict
         );
+    }
+
+    public static void word(String name, DSWord fn) {
+        dict.put(name, (Word) (ds, cs, dict) -> fn.run(ds));
+    }
+
+    public static void word(String name, CSWord fn) {
+        dict.put(name, (Word) (ds, cs, dict) -> fn.run(cs));
+    }
+
+    public static void word(String name, DSCSWord fn) {
+        dict.put(name, (Word) (ds, cs, dict) -> fn.run(ds, cs));
+    }
+
+    public static void word(String name, FullWord fn) {
+        dict.put(name, (Word) fn::run);
+    }
+
+    public static void word(String name, Object... words) {
+        Deque<Object> quote = new ArrayDeque<>();
+
+        for (int i = words.length - 1; i >= 0; i--) {
+            quote.push(words[i]);
+        }
+
+        dict.put(name, quote);
+    }
+
+    public static void word(String name, String... words) {
+        Deque<Object> quote = new ArrayDeque<>();
+
+        for (int i = words.length - 1; i >= 0; i--) {
+            quote.push(words[i]);
+        }
+
+        dict.put(name, quote);
     }
 
     @FunctionalInterface
@@ -47,7 +82,7 @@ public class ConsizeVM {
         void run(
                 Deque<Object> ds,
                 Deque<Object> cs,
-                Map<String, Word> dict
+                Map<Object, Object> dict
         );
     }
     @FunctionalInterface
@@ -55,103 +90,56 @@ public class ConsizeVM {
         Deque<Object> apply(Deque<Object> ds);
     }
 
-    public static void word(String name, DSWord fn) {
-        dict.put(name, new Word() {
-            public List<String> words() {
-                return List.of();
-            }
+    public static void pushQuoteToCS(Object quote, Deque<Object> cs) {
+        List<Object> items;
 
-            public void run(
-                    Deque<Object> ds,
-                    Deque<Object> cs,
-                    Map<String, Word> dict
-            ) {
-                fn.run(ds);
-            }
-        });
+        if (quote instanceof Deque<?> deque) {
+            items = new ArrayList<>(deque);
+        } else if (quote instanceof List<?> list) {
+            items = new ArrayList<>(list);
+        } else {
+            throw new IllegalArgumentException("Quote erwartet Stack/List, bekam: " + quote);
+        }
+
+        for (int i = items.size() - 1; i >= 0; i--) {
+            cs.push(items.get(i));
+        }
     }
-    public static void word(String name, Object... words) {
-        dict.put(name, new Word() {
-            public List<String> words() {
-                return List.of();
-            }
+    public static boolean consizeEquals(Object x, Object y) {
+        if (x == y) {
+            return true;
+        }
 
-            public void run(
-                    Deque<Object> ds,
-                    Deque<Object> cs,
-                    Map<String, Word> dict
-            ) {
-                for (int i = words.length - 1; i >= 0; i--) {
-                    cs.push(words[i]);
-                }
-            }
-        });
-    }
+        if (x instanceof Deque<?> dx && y instanceof Deque<?> dy) {
+            return sequenceEquals(dx, dy);
+        }
 
-    public static void word(String name, CSWord fn) {
-        dict.put(name, new Word() {
-            public List<String> words() {
-                return List.of();
-            }
+        if (x instanceof List<?> lx && y instanceof List<?> ly) {
+            return sequenceEquals(lx, ly);
+        }
 
-            public void run(
-                    Deque<Object> ds,
-                    Deque<Object> cs,
-                    Map<String, Word> dict
-            ) {
-                fn.run(cs);
-            }
-        });
+        if (x instanceof Deque<?> dx && y instanceof List<?> ly) {
+            return sequenceEquals(dx, ly);
+        }
+
+        if (x instanceof List<?> lx && y instanceof Deque<?> dy) {
+            return sequenceEquals(lx, dy);
+        }
+
+        return Objects.equals(x, y);
     }
 
-    public static void word(String name, DSCSWord fn) {
-        dict.put(name, new Word() {
-            public List<String> words() {
-                return List.of();
-            }
+    public static boolean sequenceEquals(Iterable<?> xs, Iterable<?> ys) {
+        Iterator<?> xi = xs.iterator();
+        Iterator<?> yi = ys.iterator();
 
-            public void run(
-                    Deque<Object> ds,
-                    Deque<Object> cs,
-                    Map<String, Word> dict
-            ) {
-                fn.run(ds, cs);
+        while (xi.hasNext() && yi.hasNext()) {
+            if (!consizeEquals(xi.next(), yi.next())) {
+                return false;
             }
-        });
-    }
+        }
 
-    public static void word(String name, FullWord fn) {
-        dict.put(name, new Word() {
-            public List<String> words() {
-                return List.of();
-            }
-
-            public void run(
-                    Deque<Object> ds,
-                    Deque<Object> cs,
-                    Map<String, Word> dict
-            ) {
-                fn.run(ds, cs, dict);
-            }
-        });
-    }
-
-    public static void word(String name, String... words) {
-        dict.put(name, new Word() {
-            public List<String> words() {
-                return List.of(words);
-            }
-
-            public void run(
-                    Deque<Object> ds,
-                    Deque<Object> cs,
-                    Map<String, Word> dict
-            ) {
-                for (int i = words.length - 1; i >= 0; i--) {
-                    cs.push(words[i]);
-                }
-            }
-        });
+        return !xi.hasNext() && !yi.hasNext();
     }
 
     public static void defineBasicWords() {
@@ -193,39 +181,39 @@ public class ConsizeVM {
                 ds.push("map");
             } else if (itm instanceof Word) {
                 ds.push("fct");
-            } else if (itm == null) {
+            } else if (itm == null || itm == NIL) {
                 ds.push("nil");
             } else {
                 ds.push("_|_");
             }
         });
 
-        // equal?: [x y] -> ["t" | "f"]
         word("equal?", (DSWord) ds -> {
             Object y = ds.pop();
             Object x = ds.pop();
 
-            ds.push(Objects.equals(x, y) ? "t" : "f");
+            ds.push(consizeEquals(x, y) ? "t" : "f");
         });
 
-        // identical?: [x y] -> ["t" | "f"]
         word("identical?", (DSWord) ds -> {
             Object y = ds.pop();
             Object x = ds.pop();
 
             ds.push(x == y ? "t" : "f");
         });
-        // emptystack: [] -> [[]]
         word("emptystack", (DSWord) ds -> {
             ds.push(new ArrayDeque<>());
         });
 
-        // push: [x s] -> [s']   (x oben auf Stack s)
         word("push", (DSWord) ds -> {
             Object x = ds.pop();
             Object s = ds.pop();
 
-            Deque<Object> stack = new ArrayDeque<>((Deque<Object>) s);
+            if (!(s instanceof Deque<?> deque)) {
+                throw new IllegalArgumentException("push erwartet Stack unter Wert, bekam: " + s);
+            }
+
+            Deque<Object> stack = new ArrayDeque<>((Deque<Object>) deque);
 
             stack.push(x);
             ds.push(stack);
@@ -238,17 +226,16 @@ public class ConsizeVM {
             ds.push(value == null ? NIL : value);
         });
 
-        // pop: [s] -> [rest]
         word("pop", (DSWord) ds -> {
-            Object s = ds.pop();
+            Deque<Object> stack = new ArrayDeque<>((Deque<Object>) ds.pop());
 
-            Deque<Object> stack = new ArrayDeque<>((Deque<Object>) s);
+            if (!stack.isEmpty()) {
+                stack.pop();
+            }
 
-            stack.pop();
             ds.push(stack);
         });
 
-        // concat: [s1 s2] -> [s1+s2]
         word("concat", (DSWord) ds -> {
             Object s2 = ds.pop();
             Object s1 = ds.pop();
@@ -269,7 +256,6 @@ public class ConsizeVM {
             ds.push(result);
         });
 
-        // reverse: [s] -> [reversed]
         word("reverse", (DSWord) ds -> {
             Object s = ds.pop();
 
@@ -285,15 +271,14 @@ public class ConsizeVM {
 
             ds.push(result);
         });
-        // mapping: [s] -> [map]
         word("mapping", (DSWord) ds -> {
-            Deque<Object> s = (Deque<Object>) ds.pop();
+            Deque<Object> s = new ArrayDeque<>((Deque<Object>) ds.pop());
 
             Map<Object, Object> map = new HashMap<>();
 
             while (!s.isEmpty()) {
-                Object value = s.pop();
                 Object key = s.pop();
+                Object value = s.pop();
 
                 map.put(key, value);
             }
@@ -301,28 +286,34 @@ public class ConsizeVM {
             ds.push(map);
         });
 
-        // unmap: [map] -> [stack]
         word("unmap", (DSWord) ds -> {
             Map<Object, Object> m = (Map<Object, Object>) ds.pop();
 
             Deque<Object> result = new ArrayDeque<>();
 
+            List<Object> flat = new ArrayList<>();
+
             for (Map.Entry<Object, Object> entry : m.entrySet()) {
-                result.push(entry.getKey());
-                result.push(entry.getValue());
+                flat.add(entry.getKey());
+                flat.add(entry.getValue());
+            }
+
+            for (int i = flat.size() - 1; i >= 0; i--) {
+                result.push(flat.get(i));
             }
 
             ds.push(result);
         });
 
-        // keys: [map] -> [stack]
         word("keys", (DSWord) ds -> {
             Map<Object, Object> m = (Map<Object, Object>) ds.pop();
 
             Deque<Object> result = new ArrayDeque<>();
 
-            for (Object key : m.keySet()) {
-                result.push(key);
+            List<Object> keys = new ArrayList<>(m.keySet());
+
+            for (int i = keys.size() - 1; i >= 0; i--) {
+                result.push(keys.get(i));
             }
 
             ds.push(result);
@@ -339,42 +330,33 @@ public class ConsizeVM {
             ds.push(result);
         });
 
-        // dissoc: [m k] -> [m']
-        word("dissoc", (DSWord) ds -> {
-            Object k = ds.pop();
 
+        word("dissoc", (DSWord) ds -> {
             Map<Object, Object> m = (Map<Object, Object>) ds.pop();
+            Object k = ds.pop();
 
             Map<Object, Object> result = new HashMap<>(m);
             result.remove(k);
 
             ds.push(result);
         });
-
-        // get: [d m k] -> [value-or-default]
         word("get", (DSWord) ds -> {
-            Object k = ds.pop();
-
-            Map<Object, Object> m = (Map<Object, Object>) ds.pop();
-
             Object d = ds.pop();
+            Map<Object, Object> m = (Map<Object, Object>) ds.pop();
+            Object k = ds.pop();
 
             ds.push(m.getOrDefault(k, d));
         });
 
-        // merge: [m1 m2] -> [merged]
         word("merge", (DSWord) ds -> {
-
-            Map<Object, Object> m2 = (Map<Object, Object>) ds.pop();
             Map<Object, Object> m1 = (Map<Object, Object>) ds.pop();
+            Map<Object, Object> m2 = (Map<Object, Object>) ds.pop();
 
             Map<Object, Object> result = new HashMap<>(m2);
             result.putAll(m1);
 
             ds.push(result);
         });
-
-        // word: [stack] -> [string]
         word("word", (DSWord) ds -> {
             Deque<Object> s = (Deque<Object>) ds.pop();
 
@@ -387,7 +369,6 @@ public class ConsizeVM {
             ds.push(result.toString());
         });
 
-        // unword: [string] -> [stack]
         word("unword", (DSWord) ds -> {
             String w = (String) ds.pop();
 
@@ -400,30 +381,44 @@ public class ConsizeVM {
             ds.push(result);
         });
 
-        // char: [string] -> [string]
         word("char", (DSWord) ds -> {
             String w = (String) ds.pop();
 
-            if (w.length() != 1) {
-                throw new IllegalArgumentException("char erwartet genau ein Zeichen");
-            }
+            String result = switch (w) {
+                case "\\space" -> " ";
+                case "\\newline" -> "\n";
+                case "\\tab" -> "\t";
+                case "\\return" -> "\r";
+                case "\\backspace" -> "\b";
+                case "\\formfeed" -> "\f";
+                default -> {
+                    if (w.startsWith("\\") && w.length() == 2) {
+                        yield w.substring(1);
+                    }
 
-            ds.push(w);
+                    if (w.length() == 1) {
+                        yield w;
+                    }
+
+                    throw new IllegalArgumentException("char erwartet Zeichenliteral, bekam: " + w);
+                }
+            };
+
+            ds.push(result);
         });
-        // print: [string] -> []
         word("print", (DSWord) ds -> {
-            String w = (String) ds.pop();
-            System.out.print(w);
+            Object w = ds.pop();
+
+            System.out.print(String.valueOf(w));
+            System.out.flush();
         });
 
-        // flush: [] -> []
         word("flush", (DSWord) ds -> {
             System.out.flush();
         });
         word("read-line", (DSWord) ds -> {
             ds.push(scanner.nextLine());
         });
-        // slurp: [file] -> [content]
         word("slurp", (DSWord) ds -> {
             String file = (String) ds.pop();
 
@@ -445,7 +440,6 @@ public class ConsizeVM {
             }
         });
 
-        // spit: [file data] -> []
         word("spit", (DSWord) ds -> {
             String data = (String) ds.pop();
             String file = (String) ds.pop();
@@ -460,7 +454,6 @@ public class ConsizeVM {
             }
         });
 
-        // spit-on: [file data] -> []
         word("spit-on", (DSWord) ds -> {
             String data = (String) ds.pop();
             String file = (String) ds.pop();
@@ -485,7 +478,6 @@ public class ConsizeVM {
             ds.push(result);
         });
 
-        // tokenize: [string] -> [stack]
         word("tokenize", (DSWord) ds -> {
             String w = ((String) ds.pop()).trim();
 
@@ -521,17 +513,14 @@ public class ConsizeVM {
 
             ds.push(result.toString());
         });
-        // current-time-millis: [] -> [string]
         word("current-time-millis", (DSWord) ds -> {
             ds.push(String.valueOf(System.currentTimeMillis()));
         });
 
-        // operating-system: [] -> [string]
         word("operating-system", (DSWord) ds -> {
             ds.push(System.getProperty("os.name"));
         });
 
-        // call: [quoteStack] -> []
         word("call", (DSCSWord) (ds, cs) -> {
             Deque<Object> quote = (Deque<Object>) ds.pop();
 
@@ -570,7 +559,6 @@ public class ConsizeVM {
             cs.clear();
             cs.addAll(newCs);
         });
-        // get-dict: [] -> [dict]
         word("get-dict", (FullWord) (ds, cs, dict) -> {
             ds.push(new HashMap<>(dict));
         });
@@ -584,21 +572,9 @@ public class ConsizeVM {
             dict.clear();
 
             for (Map.Entry<?, ?> entry : newDict.entrySet()) {
-                Object key = entry.getKey();
-                Object value = entry.getValue();
-
-                if (!(key instanceof String)) {
-                    throw new IllegalArgumentException("dict key ist kein String: " + key);
-                }
-
-                if (!(value instanceof Word)) {
-                    throw new IllegalArgumentException("dict value ist kein Word: " + value);
-                }
-
-                dict.put((String) key, (Word) value);
+                dict.put(entry.getKey(), entry.getValue());
             }
         });
-        // stepcc: führt genau einen VM-Schritt aus
         word("stepcc", (FullWord) (ds, cs, dict) -> {
             if (cs.isEmpty()) {
                 throw new IllegalStateException("stepcc erwartet nicht-leeren Call Stack");
@@ -608,17 +584,14 @@ public class ConsizeVM {
 
             try {
                 if (itm instanceof String name) {
-                    Word res = dict.get(name);
+                    Object res = dict.get(name);
 
-                    if (res != null) {
-                        List<String> wds = res.words();
-                        if (!wds.isEmpty()) {
-                            for (int i = wds.size() - 1; i >= 0; i--) {
-                                cs.push(wds.get(i));
-                            }
-                        } else {
-                            res.run(ds, cs, dict);
-                        }
+                    if (res instanceof Word word) {
+                        word.run(ds, cs, dict);
+
+                    } else if (res instanceof Deque<?> || res instanceof List<?>) {
+                        pushQuoteToCS(res, cs);
+
                     } else {
                         ds.push(name);
                         cs.push("read-word");
@@ -636,43 +609,45 @@ public class ConsizeVM {
                 cs.push("error");
             }
         });
-        // apply: [f s] -> [resultStack]
         word("apply", (DSWord) ds -> {
-            Deque<Object> s = (Deque<Object>) ds.pop();
             VMFunction f = (VMFunction) ds.pop();
+            Deque<Object> s = (Deque<Object>) ds.pop();
 
             ds.push(f.apply(s));
         });
 
-        // compose: [f2 f1] -> [f]
         word("compose", (DSWord) ds -> {
-            VMFunction f1 = (VMFunction) ds.pop();
             VMFunction f2 = (VMFunction) ds.pop();
+            VMFunction f1 = (VMFunction) ds.pop();
 
             ds.push((VMFunction) input -> f2.apply(f1.apply(input)));
         });
 
-        // func: [dict quote] -> [function]
         word("func", (DSWord) ds -> {
+            Map<Object, Object> capturedDict = (Map<Object, Object>) ds.pop();
             Deque<Object> quote = (Deque<Object>) ds.pop();
-            Map<String, Word> capturedDict = (Map<String, Word>) ds.pop();
 
             VMFunction fn = input -> {
                 Deque<Object> localDs = new ArrayDeque<>(input);
                 Deque<Object> localCs = new ArrayDeque<>(quote);
-                Map<String, Word> localDict = new HashMap<>(capturedDict);
+                Map<Object, Object> localDict = new HashMap<>(capturedDict);
 
                 while (!localCs.isEmpty()) {
                     Object itm = localCs.pop();
 
-                    if (itm instanceof String name && localDict.containsKey(name)) {
-                        Word w = localDict.get(name);
+                    if (itm instanceof String name) {
+                        Object res = localDict.get(name);
 
-                        for (int i = w.words().size() - 1; i >= 0; i--) {
-                            localCs.push(w.words().get(i));
+                        if (res instanceof Word word) {
+                            word.run(localDs, localCs, localDict);
+
+                        } else if (res instanceof Deque<?> || res instanceof List<?>) {
+                            pushQuoteToCS(res, localCs);
+
+                        } else {
+                            localDs.push(name);
                         }
 
-                        w.run(localDs, localCs, localDict);
                     } else {
                         localDs.push(itm);
                     }
@@ -683,7 +658,6 @@ public class ConsizeVM {
 
             ds.push(fn);
         });
-        // integer?: [w] -> ["t" | "f"]
         word("integer?", (DSWord) ds -> {
             Object w = ds.pop();
 
@@ -693,80 +667,79 @@ public class ConsizeVM {
             }
 
             try {
-                Integer.parseInt(s);
+                Long.parseLong(s);
                 ds.push("t");
             } catch (NumberFormatException e) {
                 ds.push("f");
             }
         });
 
-        // +: [x y] -> [x+y]
         word("+", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(String.valueOf(x + y));
         });
 
         word("-", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(String.valueOf(x - y));
         });
 
         word("*", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(String.valueOf(x * y));
         });
 
         word("div", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(String.valueOf(x / y));
         });
 
         word("mod", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(String.valueOf(x % y));
         });
 
         word("<", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(x < y ? "t" : "f");
         });
 
         word(">", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(x > y ? "t" : "f");
         });
 
         word("==", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(x == y ? "t" : "f");
         });
 
         word("<=", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(x <= y ? "t" : "f");
         });
 
         word(">=", (DSWord) ds -> {
-            int y = Integer.parseInt((String) ds.pop());
-            int x = Integer.parseInt((String) ds.pop());
+            long y = Long.parseLong((String) ds.pop());
+            long x = Long.parseLong((String) ds.pop());
 
             ds.push(x >= y ? "t" : "f");
         });
@@ -803,7 +776,6 @@ public class ConsizeVM {
             };
         }
 
-        // Programm auf den Call Stack legen
         for (int i = args.length - 1; i >= 0; i--) {
             cs.push(args[i]);
         }
@@ -811,24 +783,38 @@ public class ConsizeVM {
         Scanner scanner = new Scanner(System.in);
 
         while (!cs.isEmpty()) {
-
             Object next = cs.pop();
 
-            if (next instanceof String name && dict.containsKey(name)) {
-                dict.get(name).run(ds, cs, dict);
+            if (next instanceof String name) {
+                Object res = dict.get(name);
+
+                if (res instanceof Word word) {
+                    word.run(ds, cs, dict);
+
+                } else if (res instanceof Deque<?> || res instanceof List<?>) {
+                    pushQuoteToCS(res, cs);
+
+                } else {
+                    ds.push(name);
+                }
+
             } else {
                 ds.push(next);
             }
+            if(PRINT){
+                System.out.println(
+                        "Words: " + dict.keySet().stream()
+                                .map(String::valueOf)
+                                .sorted()
+                                .collect(java.util.stream.Collectors.joining(" "))
+                );
 
-            System.out.println(
-                    "Words: " + String.join(" ", new TreeSet<>(dict.keySet()))
-            );
+                System.out.println("DS: " + ds);
+                System.out.println("CS: " + cs);
+            }
 
-            System.out.println("DS: " + ds);
-            System.out.println("CS: " + cs);
         }
 
-        // Endergebnis
         System.out.println("Programm beendet.");
         System.out.println("DS: " + ds);
     }
