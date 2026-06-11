@@ -1,5 +1,7 @@
 package consize;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.*;
 
 public class ConsizeVM {
@@ -387,10 +389,6 @@ public class ConsizeVM {
             String result = switch (w) {
                 case "\\space" -> " ";
                 case "\\newline" -> "\n";
-                case "\\tab" -> "\t";
-                case "\\return" -> "\r";
-                case "\\backspace" -> "\b";
-                case "\\formfeed" -> "\f";
                 default -> {
                     if (w.startsWith("\\") && w.length() == 2) {
                         yield w.substring(1);
@@ -842,7 +840,7 @@ public class ConsizeVM {
     }
 
 
-    public static String shortItem(Object item) {
+    public static @NotNull String shortItem(Object item) {
         String s = String.valueOf(item);
 
         // Einzelnes Element auf max. 40 Zeichen begrenzen
